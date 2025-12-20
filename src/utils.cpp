@@ -11,19 +11,36 @@
 bool GetIsWindows11OrGreater()
 {
 	HKEY hKey;
-	if (ERROR_SUCCESS != RegOpenKeyExA(HKEY_LOCAL_MACHINE, R"(SOFTWARE\Microsoft\Windows NT\CurrentVersion)", 0, KEY_READ, &hKey))
+	LSTATUS status = RegOpenKeyExA(HKEY_LOCAL_MACHINE, R"(SOFTWARE\Microsoft\Windows NT\CurrentVersion)", 0, KEY_READ, &hKey);
+	if (status != ERROR_SUCCESS)
+	{
+		LOG_DEBUG("RegOpenKeyExA failed (error {})", status);
 		return false;
+	}
 
 	int winBuildNumber = 0;
 
 	DWORD size = 0;
-	LSTATUS status = RegQueryValueExA(hKey, "CurrentBuild", nullptr, nullptr, nullptr, &size);
+	status = RegQueryValueExA(hKey, "CurrentBuild", nullptr, nullptr, nullptr, &size);
 	if ((status == ERROR_SUCCESS || status == ERROR_MORE_DATA) && size > 0)
 	{
 		auto buffer = std::make_unique_for_overwrite<char[]>(size);
-		if (ERROR_SUCCESS == RegQueryValueExA(hKey, "CurrentBuild", nullptr, nullptr, (LPBYTE)buffer.get(), nullptr))
+		status = RegQueryValueExA(hKey, "CurrentBuild", nullptr, nullptr, (LPBYTE)buffer.get(), &size);
+		if (status == ERROR_SUCCESS)
+		{
 			winBuildNumber = std::atoi(buffer.get());
+			LOG_DEBUG("winBuildNumber: {}", winBuildNumber);
+		}
+		else
+		{
+			LOG_DEBUG("RegQueryValueExA failed (error {})", status);
+		}
 	}
+	else
+	{
+		LOG_DEBUG("RegOpenKeyExA failed (error {})", status);
+	}
+
 	RegCloseKey(hKey);
 
 	return winBuildNumber >= 22000;

@@ -37,10 +37,12 @@ static void Init()
 	if (!Log::Get().Init())
 		assert(false);
 
+	LOG_INFO("Init started");
+
 	char modName[MAX_PATH];
 	if (!GetModuleFileNameA(GetModuleHandleA(nullptr), modName, std::size(modName)))
 	{
-		LOG_ERROR("Failed to get module name");
+		LOG_ERROR("Failed to get module name (error {})", GetLastError());
 		return;
 	}
 
@@ -73,20 +75,22 @@ static void Init()
 		return;
 	}
 
-	if (MH_OK != MH_Initialize())
+	if (auto status = MH_Initialize(); status != MH_OK)
 	{
-		LOG_ERROR("Failed to initialize MinHook");
+		LOG_ERROR("Failed to initialize MinHook ({})", MH_StatusToString(status));
 		return;
 	}
 	
 	MODULEINFO info{};
 	if (!GetModuleInformation(GetCurrentProcess(), GetModuleHandle(nullptr), &info, sizeof(info)))
 	{
-		LOG_ERROR("Failed to retrieve module info");
+		LOG_ERROR("Failed to retrieve module info (error {})", GetLastError());
 		return;
 	}
 
 	const mem::region region{info.lpBaseOfDll, info.SizeOfImage};
+	LOG_INFO("Base: 0x{:X}, Size: 0x{:X}", region.start.as<uintptr_t>(), region.size);
+
 	auto addr = mem::scan(mem::pattern("E8 ? ? ? ? 48 8B 06 48 89 F1 ? 89 ? 4D 89 F8 FF"), region);
 	if (!addr)
 	{
@@ -94,18 +98,25 @@ static void Init()
 		return;
 	}
 
-	addr += addr.at<int>(1) + 5;
-	if (MH_OK != MH_CreateHook(addr.as<void*>(), (void*)&HK_fiDeviceDirectStorage__RegisterFile, (void**)&OG_fiDeviceDirectStorage__RegisterFile))
+	LOG_DEBUG("Found fiDeviceDirectStorage::RegisterFile call at 0x{:X}", addr.as<uintptr_t>());
+
+	addr = addr.add(1).rip(4);
+	if (auto status = MH_CreateHook(addr.as<void*>(),
+		(void*)&HK_fiDeviceDirectStorage__RegisterFile,
+		(void**)&OG_fiDeviceDirectStorage__RegisterFile);
+		status != MH_OK)
 	{
-		LOG_ERROR("Failed to create hook");
+		LOG_ERROR("Failed to create hook at 0x{:X} ({})", addr.as<uintptr_t>(), MH_StatusToString(status));
 		return;
 	}
 
-	if (MH_OK != MH_EnableHook(MH_ALL_HOOKS))
+	if (auto status = MH_EnableHook(MH_ALL_HOOKS); status != MH_OK)
 	{
-		LOG_ERROR("Failed to enable hooks");
+		LOG_ERROR("Failed to enable hooks ({})", MH_StatusToString(status));
 		return;
 	}
+
+	LOG_INFO("Init finished");
 }
 
 static void Shutdown()

@@ -50,6 +50,22 @@ static void Init()
 		LOG_WARN("Module name is not GTA5_Enhanced.exe. Stopping.");
 		return;
 	}
+
+	uint16_t major = 0, minor = 0;
+	if (GetGameBuild(major, minor))
+	{
+		LOG_INFO("Game build: {}.{}", major, minor);
+
+		if (major < 1013)
+		{
+			LOG_WARN("Game build < 1013. Stopping.");
+			return;
+		}
+	}
+	else
+	{
+		LOG_WARN("Unknown game build");
+	}
 	
 	if (!IsDirectStorageEnabled())
 	{

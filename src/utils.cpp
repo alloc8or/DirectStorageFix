@@ -189,3 +189,32 @@ bool IsDirectStorageEnabled()
 
 	return true;
 }
+
+bool GetGameBuild(uint16_t& major, uint16_t& minor)
+{
+	DWORD size = GetFileVersionInfoSize(TEXT("GTA5_Enhanced.exe"), nullptr);
+	if (size == 0)
+	{
+		LOG_DEBUG("GetFileVersionInfoSize returned zero");
+		return false;
+	}
+
+	auto versionInfo = std::make_unique_for_overwrite<uint8_t[]>(size);
+	if (!GetFileVersionInfo(TEXT("GTA5_Enhanced.exe"), 0, size, versionInfo.get()))
+	{
+		LOG_DEBUG("GetFileVersionInfo failed (error {})", GetLastError());
+		return false;
+	}
+
+	VS_FIXEDFILEINFO* fileInfo = nullptr;
+	UINT fileInfoLen = 0;
+	if (!VerQueryValue(versionInfo.get(), TEXT("\\"), (LPVOID*)&fileInfo, &fileInfoLen))
+	{
+		LOG_DEBUG("VerQueryValueA failed (error {})", GetLastError());
+		return false;
+	}
+
+	major = (fileInfo->dwFileVersionLS >> 16) & 0xFFFF;
+	minor = (fileInfo->dwFileVersionLS >> 0) & 0xFFFF;
+	return true;
+}

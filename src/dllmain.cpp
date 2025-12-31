@@ -35,7 +35,7 @@ void HK_fiDeviceDirectStorage__RegisterFile(void* _this, const char* fileName, c
 static void Init()
 {
 	if (!Log::Get().Init())
-		assert(false);
+		assert(false && "Log init failed");
 
 	LOG_INFO("Init started");
 
@@ -53,6 +53,8 @@ static void Init()
 		return;
 	}
 
+	LOG_INFO("Windows NT build: {}", GetWindowsNtBuild());
+
 	uint16_t major = 0, minor = 0;
 	if (GetGameBuild(major, minor))
 	{
@@ -69,9 +71,10 @@ static void Init()
 		LOG_WARN("Unknown game build");
 	}
 	
-	if (!IsDirectStorageEnabled())
+	DStorageStatus status{};
+	if (!IsDirectStorageEnabled(&status))
 	{
-		LOG_WARN("DirectStorage not enabled. Stopping.");
+		LOG_WARN("DirectStorage not enabled ({}). Stopping.", DStorageStatus_ToFriendlyString(status));
 		return;
 	}
 

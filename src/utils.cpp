@@ -8,17 +8,17 @@
 #include <fstream>
 #include <filesystem>
 
-bool GetIsWindows11OrGreater()
+int GetWindowsNtBuild()
 {
+	int winBuildNumber = 0;
+
 	HKEY hKey;
 	LSTATUS status = RegOpenKeyExA(HKEY_LOCAL_MACHINE, R"(SOFTWARE\Microsoft\Windows NT\CurrentVersion)", 0, KEY_READ, &hKey);
 	if (status != ERROR_SUCCESS)
 	{
 		LOG_DEBUG("RegOpenKeyExA failed (error {})", status);
-		return false;
+		return winBuildNumber;
 	}
-
-	int winBuildNumber = 0;
 
 	DWORD size = 0;
 	status = RegQueryValueExA(hKey, "CurrentBuild", nullptr, nullptr, nullptr, &size);
@@ -43,7 +43,7 @@ bool GetIsWindows11OrGreater()
 
 	RegCloseKey(hKey);
 
-	return winBuildNumber >= 22000;
+	return winBuildNumber;
 }
 
 bool IsRunningOnNVMe()
@@ -114,7 +114,7 @@ bool IsRunningOnNVMe()
 		if (dataDesc->ProtocolSpecificData.ProtocolDataOffset < sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA) ||
 			dataDesc->ProtocolSpecificData.ProtocolDataLength < NVME_MAX_LOG_SIZE)
 		{
-			LOG_DEBUG("Offset/Length mismatch (expected <{}/{}, got {}/{})",
+			LOG_DEBUG("Offset/Length mismatch (expected >={}/{}, got {}/{})",
 				sizeof(STORAGE_PROTOCOL_SPECIFIC_DATA), NVME_MAX_LOG_SIZE,
 				dataDesc->ProtocolSpecificData.ProtocolDataOffset, dataDesc->ProtocolSpecificData.ProtocolDataLength);
 			return false;
@@ -138,7 +138,7 @@ bool IsRunningOnNVMe()
 
 // NOTE: This does not implement the BitLocker check that the game has.
 // I don't think anyone has BitLocker enabled on a game drive anyway, as that would be kinda retarded.
-bool IsDirectStorageEnabled()
+bool IsDirectStorageEnabled(DStorageStatus* outStatus)
 {
 	bool forceDS = false, forceWin32 = false;
 
@@ -166,27 +166,32 @@ bool IsDirectStorageEnabled()
 	if (forceWin32)
 	{
 		LOG_DEBUG("Returning false due to -forcewin32");
+		if (outStatus) *outStatus = DStorageStatus::Disabled_ForceWin32;
 		return false;
 	}
 
 	if (forceDS)
 	{
 		LOG_DEBUG("Returning true due to -forceds");
+		if (outStatus) *outStatus = DStorageStatus::Enabled_ForceDS;
 		return true;
 	}
 
-	if (!GetIsWindows11OrGreater())
+	if (GetWindowsNtBuild() < 22000)
 	{
 		LOG_DEBUG("Returning false due to not running on Windows 11");
+		if (outStatus) *outStatus = DStorageStatus::Disabled_NotOnWindows11;
 		return false;
 	}
 
 	if (!IsRunningOnNVMe())
 	{
 		LOG_DEBUG("Returning false due to not running on an NVMe drive");
+		if (outStatus) *outStatus = DStorageStatus::Disabled_NotOnNVMe;
 		return false;
 	}
 
+	if (outStatus) *outStatus = DStorageStatus::Enabled;
 	return true;
 }
 
@@ -215,6 +220,6 @@ bool GetGameBuild(uint16_t& major, uint16_t& minor)
 	}
 
 	major = (fileInfo->dwFileVersionLS >> 16) & 0xFFFF;
-	minor = (fileInfo->dwFileVersionLS >> 0) & 0xFFFF;
+	minor = (fileInfo->dwFileVersionLS >>  0) & 0xFFFF;
 	return true;
 }
